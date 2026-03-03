@@ -1,0 +1,60 @@
+---
+# Playbook : Mise à jour des enregistrements DNS d'un projet
+# Appelé par : tasks/dns_tasks.py (Celery)
+#
+# Variables attendues (extra_vars depuis AnsibleFlow) :
+#   - project_name   : nom du projet
+#   - project_domain : domaine à gérer
+#   - dns_records    : liste des enregistrements DNS à appliquer
+#
+# Exemple de dns_records :
+#   dns_records:
+#     - type: A
+#       name: "@"
+#       value: "1.2.3.4"
+#       ttl: 3600
+#     - type: CNAME
+#       name: "www"
+#       value: "mon-domaine.fr."
+#       ttl: 3600
+#     - type: MX
+#       name: "@"
+#       value: "mail.mon-domaine.fr."
+#       ttl: 3600
+#       priority: 10
+
+- name: Mise à jour DNS pour {{ project_domain | default('inconnu') }}
+  hosts: all
+  gather_facts: true
+  become: true
+
+  pre_tasks:
+    - name: Afficher les paramètres DNS
+      ansible.builtin.debug:
+        msg:
+          - "Projet      : {{ project_name }}"
+          - "Domaine     : {{ project_domain }}"
+          - "Hôte DNS    : {{ inventory_hostname }}"
+          - "Enregistrements : {{ dns_records | length }}"
+
+    - name: Vérifier que la liste dns_records n'est pas vide
+      ansible.builtin.assert:
+        that:
+          - dns_records is defined
+          - dns_records | length > 0
+        fail_msg: "Aucun enregistrement DNS à appliquer"
+
+  roles:
+    - role: dns
+
+  post_tasks:
+    - name: Vérifier la résolution DNS locale (si dig est disponible)
+      ansible.builtin.command:
+        cmd: "dig @localhost {{ project_domain }} A +short"
+      register: dig_result
+      changed_when: false
+      ignore_errors: true
+
+    - name: Résultat de la résolution DNS
+      ansible.builtin.debug:
+        msg: "Résolution {{ project_domain }} → {{ dig_result.stdout | default('N/A') }}"
