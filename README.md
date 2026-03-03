@@ -248,6 +248,36 @@ ansibleflow/
 
 ---
 
+## Historique des commits
+
+61 commits atomiques documentant chaque étape de construction du projet.
+
+| Catégorie | Commits | Description |
+|---|---|---|
+| `chore/docs` | 3 | .gitignore, README, requirements.txt |
+| `build(backend)` | 2 | Dockerfile, .dockerignore |
+| `feat(backend/core)` | 3 | Configuration, base de données, sécurité JWT |
+| `feat(backend/models)` | 5 | User, Project, Backup, Deployment, DNSRecord |
+| `feat(backend/services)` | 3 | ansible-runner, Vault, notifications |
+| `feat(backend/tasks)` | 4 | Celery app, tâches backup/deploy/DNS |
+| `feat(backend/api)` | 3 | Routes REST, WebSocket, entrypoint FastAPI |
+| `feat(ansible)` | 10 | ansible.cfg, inventaire, rôles (dns/backup/deploy/restore), playbooks |
+| `feat(frontend)` | 5 | Tooling Vite/Tailwind, index.html, App, main, CSS |
+| `feat(frontend/services)` | 3 | api.js (Axios + refresh JWT), websocket.js, auth.js |
+| `feat(frontend/components)` | 4 | Navbar, StatusBadge, Modal, LogViewer |
+| `feat(frontend/pages)` | 6 | Login, Dashboard, ProjectDetail, Deploy, Backups, AddProject |
+| `build(frontend)` | 3 | Dockerfile multi-stage, .dockerignore, nginx.conf |
+| `feat(docker)` | 2 | nginx.conf reverse proxy, docker-compose.yml |
+| `fix` | 5 | Corrections : naming conflict, worker build, proxy apt-get, healthcheck curl, email-validator |
+
+Consulter l'historique complet :
+
+```bash
+git log --oneline
+```
+
+---
+
 ## Dépannage
 
 **Le backend ne démarre pas**
