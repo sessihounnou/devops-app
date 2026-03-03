@@ -1,0 +1,148 @@
+---
+- name: Vérifier que project_name est défini
+  ansible.builtin.assert:
+    that:
+      - project_name is defined
+      - project_name | length > 0
+    fail_msg: "La variable project_name est obligatoire"
+
+# ── Préparer les répertoires ───────────────────────────────────────────────────
+- name: Définir le nom de l'archive
+  ansible.builtin.set_fact:
+    backup_timestamp: "{{ lookup('pipe', 'date +%Y%m%d_%H%M%S') }}"
+    backup_archive_name: "{{ project_name }}_{{ lookup('pipe', 'date +%Y%m%d_%H%M%S') }}.tar.{{ backup_compression }}"
+
+- name: Créer le répertoire temporaire sur le serveur cible
+  ansible.builtin.file:
+    path: "{{ backup_remote_tmp }}/{{ project_name }}"
+    state: directory
+    mode: "0700"
+
+- name: Créer le répertoire de stockage final
+  ansible.builtin.file:
+    path: "{{ backup_storage_path }}/{{ project_name }}"
+    state: directory
+    mode: "0755"
+
+# ── Sauvegarde des fichiers applicatifs ───────────────────────────────────────
+- name: Vérifier que le répertoire applicatif existe
+  ansible.builtin.stat:
+    path: "{{ app_base_dir }}/{{ project_name }}"
+  register: app_dir_stat
+
+- name: Archiver les fichiers du projet
+  ansible.builtin.archive:
+    path: "{{ app_base_dir }}/{{ project_name }}"
+    dest: "{{ backup_remote_tmp }}/{{ project_name }}/app_{{ backup_archive_name }}"
+    format: "{{ backup_compression }}"
+    mode: "0600"
+  when: app_dir_stat.stat.exists
+  register: app_archive
+
+# ── Dump base de données MySQL ────────────────────────────────────────────────
+- name: Dump MySQL
+  community.mysql.mysql_db:
+    name: "{{ db_name }}"
+    state: dump
+    target: "{{ backup_remote_tmp }}/{{ project_name }}/db_{{ project_name }}.sql"
+    login_user: "{{ db_user }}"
+    login_password: "{{ db_password }}"
+    login_host: "{{ db_host }}"
+    login_port: "{{ db_port_mysql }}"
+  when: db_type == "mysql" and db_name | length > 0
+  no_log: true
+
+- name: Compresser le dump MySQL
+  ansible.builtin.archive:
+    path: "{{ backup_remote_tmp }}/{{ project_name }}/db_{{ project_name }}.sql"
+    dest: "{{ backup_remote_tmp }}/{{ project_name }}/db_{{ backup_archive_name }}"
+    format: "{{ backup_compression }}"
+    remove: true
+  when: db_type == "mysql" and db_name | length > 0
+
+# ── Dump base de données PostgreSQL ──────────────────────────────────────────
+- name: Dump PostgreSQL
+  community.postgresql.postgresql_db:
+    name: "{{ db_name }}"
+    state: dump
+    target: "{{ backup_remote_tmp }}/{{ project_name }}/db_{{ project_name }}.sql"
+    login_user: "{{ db_user }}"
+    login_password: "{{ db_password }}"
+    login_host: "{{ db_host }}"
+    login_port: "{{ db_port_pgsql }}"
+  when: db_type == "postgresql" and db_name | length > 0
+  no_log: true
+  become_user: postgres
+
+- name: Compresser le dump PostgreSQL
+  ansible.builtin.archive:
+    path: "{{ backup_remote_tmp }}/{{ project_name }}/db_{{ project_name }}.sql"
+    dest: "{{ backup_remote_tmp }}/{{ project_name }}/db_{{ backup_archive_name }}"
+    format: "{{ backup_compression }}"
+    remove: true
+  when: db_type == "postgresql" and db_name | length > 0
+
+# ── Assembler l'archive finale ────────────────────────────────────────────────
+- name: Créer l'archive finale regroupant tout
+  community.general.archive:
+    path: "{{ backup_remote_tmp }}/{{ project_name }}/"
+    dest: "{{ backup_storage_path }}/{{ project_name }}/{{ backup_archive_name }}"
+    format: "{{ backup_compression }}"
+    mode: "0600"
+  register: final_archive
+
+# ── Calculer le checksum ──────────────────────────────────────────────────────
+- name: Calculer le checksum SHA256 de l'archive
+  ansible.builtin.stat:
+    path: "{{ backup_storage_path }}/{{ project_name }}/{{ backup_archive_name }}"
+    checksum_algorithm: sha256
+    get_checksum: true
+  register: archive_stat
+
+- name: Stocker les métadonnées de la sauvegarde
+  ansible.builtin.set_fact:
+    backup_result:
+      archive_name: "{{ backup_archive_name }}"
+      file_path: "{{ backup_storage_path }}/{{ project_name }}/{{ backup_archive_name }}"
+      size_mb: "{{ (archive_stat.stat.size / 1048576) | round(2) }}"
+      checksum: "{{ archive_stat.stat.checksum }}"
+      storage_server: "{{ inventory_hostname }}"
+      timestamp: "{{ ansible_date_time.iso8601 }}"
+
+- name: Afficher les métadonnées
+  ansible.builtin.debug:
+    var: backup_result
+
+# ── Nettoyage temporaire ──────────────────────────────────────────────────────
+- name: Supprimer les fichiers temporaires
+  ansible.builtin.file:
+    path: "{{ backup_remote_tmp }}/{{ project_name }}"
+    state: absent
+
+# ── Rétention : supprimer les anciennes sauvegardes ──────────────────────────
+- name: Lister les archives existantes (ordre chronologique)
+  ansible.builtin.find:
+    paths: "{{ backup_storage_path }}/{{ project_name }}"
+    patterns: "{{ project_name }}_*.tar.*"
+    age_stamp: mtime
+  register: existing_backups
+  when: backup_retention_count > 0
+
+- name: Supprimer les archives excédentaires
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: >-
+    {{
+      existing_backups.files
+      | sort(attribute='mtime')
+      | list
+      | difference(
+          existing_backups.files
+          | sort(attribute='mtime', reverse=True)
+          | list
+          | slice(backup_retention_count)
+          | first
+        )
+    }}
+  when: backup_retention_count > 0 and existing_backups.files | length > backup_retention_count

@@ -1,0 +1,32 @@
+---
+# Valeurs par défaut du rôle backup
+
+project_name: ""
+project_domain: ""
+backup_id: ""
+
+# Répertoire de travail temporaire sur le serveur cible
+backup_remote_tmp: /tmp/ansibleflow_backups
+
+# Serveur et répertoire de stockage final des archives
+backup_storage_path: /backups
+
+# Compression (gz | bz2 | xz)
+backup_compression: gz
+
+# Répertoire applicatif à sauvegarder
+app_base_dir: /var/www
+
+# ── Base de données ────────────────────────────────────────────────────────────
+# Type : mysql | postgresql | none
+db_type: none
+db_name: ""
+db_user: ""
+db_password: ""
+db_host: localhost
+db_port_mysql: 3306
+db_port_pgsql: 5432
+
+# ── Rétention ─────────────────────────────────────────────────────────────────
+# Nombre de sauvegardes à conserver (0 = infini)
+backup_retention_count: 10

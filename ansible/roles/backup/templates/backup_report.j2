@@ -1,0 +1,7 @@
+===== RAPPORT DE SAUVEGARDE =====
+Projet      : {{ project_name }}
+Date        : {{ ansible_date_time.iso8601 }}
+Hôte source : {{ inventory_hostname }}
+Archive     : {{ backup_archive_name }}
+Stockage    : {{ backup_storage_path }}/{{ project_name }}/{{ backup_archive_name }}
+================================
