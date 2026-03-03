@@ -1,0 +1,70 @@
+---
+# Playbook : Restauration d'un projet depuis une sauvegarde
+# Appelé par : tasks/deploy_tasks.py (rollback automatique)
+#            ou api/routes/backups.py (restauration manuelle)
+#
+# Variables attendues (extra_vars depuis AnsibleFlow) :
+#   - project_name         : nom du projet
+#   - target_host          : IP ou hostname du serveur cible
+#   - target_ssh_user      : utilisateur SSH cible
+#   - backup_archive_path  : chemin complet de l'archive à restaurer
+#   - db_type              : mysql | postgresql | none (optionnel)
+#   - db_name / db_user / db_password (si db_type != none)
+
+- name: Restauration de {{ project_name | default('inconnu') }}
+  hosts: all
+  gather_facts: true
+  become: true
+
+  pre_tasks:
+    - name: Afficher les paramètres de restauration
+      ansible.builtin.debug:
+        msg:
+          - "Projet      : {{ project_name }}"
+          - "Hôte cible  : {{ inventory_hostname }}"
+          - "Archive     : {{ backup_archive_path }}"
+          - "Base de données : {{ db_type | default('none') }}"
+
+    - name: Confirmer que l'archive source existe sur le contrôleur
+      ansible.builtin.stat:
+        path: "{{ backup_archive_path }}"
+      register: archive_check
+      delegate_to: localhost
+
+    - name: Échouer si l'archive est introuvable
+      ansible.builtin.fail:
+        msg: "Archive introuvable sur le contrôleur : {{ backup_archive_path }}"
+      when: not archive_check.stat.exists
+
+    - name: Copier l'archive vers le serveur cible
+      ansible.builtin.copy:
+        src: "{{ backup_archive_path }}"
+        dest: "/tmp/{{ backup_archive_path | basename }}"
+        mode: "0600"
+
+    - name: Mettre à jour backup_archive_path avec le chemin distant
+      ansible.builtin.set_fact:
+        backup_archive_path: "/tmp/{{ backup_archive_path | basename }}"
+
+  roles:
+    - role: restore
+
+  post_tasks:
+    - name: Supprimer l'archive copiée sur le serveur cible
+      ansible.builtin.file:
+        path: "{{ backup_archive_path }}"
+        state: absent
+
+    - name: Vérifier que le service web répond après restauration
+      ansible.builtin.uri:
+        url: "http://{{ project_domain | default(inventory_hostname) }}"
+        status_code: [200, 301, 302]
+        timeout: 15
+      register: post_restore_check
+      ignore_errors: true
+
+    - name: Résultat post-restauration
+      ansible.builtin.debug:
+        msg: >-
+          Restauration {{ project_name }} terminée.
+          Health check : {{ post_restore_check.status | default('N/A') }}
