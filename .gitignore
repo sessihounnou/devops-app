@@ -1,0 +1,90 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# SECRETS & CONFIGURATION SENSIBLE
+# ══════════════════════════════════════════════════════════════════════════════
+
+.env
+.env.*
+!.env.example
+*.secret
+secrets.yml
+vault/.vault_pass
+vault/vault_pass
+ansible/vault/secrets.yml
+*vault_password*
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PYTHON / BACKEND
+# ══════════════════════════════════════════════════════════════════════════════
+
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+venv/
+env/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+*.log
+
+# ══════════════════════════════════════════════════════════════════════════════
+# NODE / FRONTEND
+# ══════════════════════════════════════════════════════════════════════════════
+
+node_modules/
+frontend/dist/
+frontend/.cache/
+*.local
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ANSIBLE
+# ══════════════════════════════════════════════════════════════════════════════
+
+# Dossiers générés par ansible-runner
+ansible/runner/
+# host_vars générés dynamiquement par le backend
+ansible/inventory/host_vars/
+# Collections installées
+ansible/collections/
+# Retry files
+*.retry
+
+# ══════════════════════════════════════════════════════════════════════════════
+# DOCKER
+# ══════════════════════════════════════════════════════════════════════════════
+
+# Volumes Docker persistés localement (si bind-mount)
+postgres_data/
+redis_data/
+backups_data/
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SSH / CLÉS
+# ══════════════════════════════════════════════════════════════════════════════
+
+*.pem
+*.key
+id_rsa
+id_ed25519
+*.pub
+!*.pub.example
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ÉDITEURS & OS
+# ══════════════════════════════════════════════════════════════════════════════
+
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
