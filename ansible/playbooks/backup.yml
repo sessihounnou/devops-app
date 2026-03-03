@@ -1,0 +1,36 @@
+---
+# Playbook : Sauvegarde d'un projet
+# Appelé par : tasks/backup_tasks.py (Celery)
+#
+# Variables attendues (extra_vars depuis AnsibleFlow) :
+#   - project_name      : nom du projet
+#   - project_domain    : domaine associé
+#   - backup_id         : id de l'enregistrement Backup en base
+#   - backup_storage_path : chemin de stockage des archives (optionnel)
+#   - db_type           : mysql | postgresql | none (optionnel)
+#   - db_name / db_user / db_password (si db_type != none)
+
+- name: Sauvegarde du projet {{ project_name | default('inconnu') }}
+  hosts: all
+  gather_facts: true
+  become: true
+
+  vars:
+    backup_storage_path: "{{ backup_storage_path | default('/backups') }}"
+
+  pre_tasks:
+    - name: Afficher les paramètres de sauvegarde
+      ansible.builtin.debug:
+        msg:
+          - "Projet      : {{ project_name }}"
+          - "Hôte        : {{ inventory_hostname }}"
+          - "Stockage    : {{ backup_storage_path }}"
+          - "Base de données : {{ db_type | default('none') }}"
+
+  roles:
+    - role: backup
+
+  post_tasks:
+    - name: Résumé de la sauvegarde
+      ansible.builtin.debug:
+        msg: "Sauvegarde terminée : {{ backup_result | default({}) }}"
