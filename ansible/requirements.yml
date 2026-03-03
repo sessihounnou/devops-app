@@ -1,0 +1,16 @@
+---
+# Collections Ansible requises par AnsibleFlow
+# Installer avec : ansible-galaxy collection install -r requirements.yml
+
+collections:
+  - name: community.mysql
+    version: ">=3.9.0"
+
+  - name: community.postgresql
+    version: ">=3.4.0"
+
+  - name: community.general
+    version: ">=9.0.0"
+
+  - name: ansible.posix
+    version: ">=1.5.0"
