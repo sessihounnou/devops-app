@@ -1,0 +1,62 @@
+---
+# Playbook : Déploiement d'un projet vers un serveur cible
+# Appelé par : tasks/deploy_tasks.py (Celery)
+#
+# Variables attendues (extra_vars depuis AnsibleFlow) :
+#   - project_name        : nom du projet
+#   - project_domain      : domaine associé
+#   - target_host         : IP ou hostname du serveur cible
+#   - target_ssh_user     : utilisateur SSH cible
+#   - target_environment  : production | staging | development
+#   - components          : liste des composants (application, nginx, database…)
+#   - deploy_method       : git | archive
+#   - git_repo / git_branch (si deploy_method == git)
+
+- name: Déploiement de {{ project_name | default('inconnu') }} vers {{ target_host | default('cible') }}
+  hosts: all
+  gather_facts: true
+  become: true
+
+  vars:
+    target_environment: "{{ target_environment | default('production') }}"
+    components: "{{ components | default(['application', 'nginx']) }}"
+
+  pre_tasks:
+    - name: Afficher les paramètres de déploiement
+      ansible.builtin.debug:
+        msg:
+          - "Projet      : {{ project_name }}"
+          - "Cible       : {{ inventory_hostname }}"
+          - "Environnement : {{ target_environment }}"
+          - "Composants  : {{ components | join(', ') }}"
+
+    - name: Vérifier la connectivité SSH vers le serveur cible
+      ansible.builtin.ping:
+
+    - name: Vérifier l'espace disque disponible (minimum 500 Mo)
+      ansible.builtin.shell: df -BM / | awk 'NR==2 {print $4}' | tr -d 'M'
+      register: free_space
+      changed_when: false
+
+    - name: Avertir si l'espace disque est insuffisant
+      ansible.builtin.fail:
+        msg: "Espace disque insuffisant : {{ free_space.stdout }} Mo disponibles (minimum 500 Mo)"
+      when: free_space.stdout | int < 500
+
+  roles:
+    - role: deploy
+
+  post_tasks:
+    - name: Vérifier que le service web répond
+      ansible.builtin.uri:
+        url: "http://{{ project_domain }}"
+        status_code: [200, 301, 302]
+        timeout: 10
+      register: health_check
+      ignore_errors: true
+
+    - name: Résultat du health check
+      ansible.builtin.debug:
+        msg: >-
+          Health check {{ 'OK' if health_check.status in [200, 301, 302] else 'FAILED' }}
+          — status {{ health_check.status | default('N/A') }}
