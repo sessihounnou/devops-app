@@ -1,0 +1,23 @@
+---
+# Variables globales partagées par tous les hôtes
+
+# ── Chemins sur les serveurs cibles ───────────────────────────────────────────
+app_base_dir: /var/www
+backup_remote_dir: /tmp/ansibleflow_backups
+backup_storage_server: "{{ lookup('env', 'BACKUP_STORAGE_SERVER') | default('localhost') }}"
+backup_storage_path: /backups
+
+# ── Base de données (valeurs par défaut — à surcharger par projet) ────────────
+db_port_mysql: 3306
+db_port_pgsql: 5432
+
+# ── Web server ────────────────────────────────────────────────────────────────
+webserver: nginx          # nginx | apache2
+
+# ── DNS (serveur BIND9 sur la machine cible) ──────────────────────────────────
+bind_zone_dir: /etc/bind/zones
+bind_conf_dir: /etc/bind
+bind_service: named       # named (RHEL) | bind9 (Debian/Ubuntu)
+
+# ── Timeouts ──────────────────────────────────────────────────────────────────
+task_timeout: 600         # secondes max par tâche longue
