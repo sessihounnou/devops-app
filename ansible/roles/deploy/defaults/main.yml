@@ -1,0 +1,57 @@
+---
+project_name: ""
+project_domain: ""
+target_environment: production
+
+# Répertoire d'installation sur le serveur cible
+app_base_dir: /var/www
+
+# Utilisateur propriétaire des fichiers applicatifs
+app_user: www-data
+app_group: www-data
+
+# Composants à déployer (liste passée depuis l'API)
+# Valeurs possibles : application, database, nginx, systemd
+components:
+  - application
+  - nginx
+
+# ── Source du déploiement ─────────────────────────────────────────────────────
+# Méthode : git | archive
+deploy_method: git
+
+# Git
+git_repo: ""
+git_branch: main
+git_depth: 1
+
+# Archive (si deploy_method == archive)
+deploy_archive_url: ""
+deploy_archive_checksum: ""
+
+# ── Base de données ────────────────────────────────────────────────────────────
+db_type: none
+db_name: ""
+db_user: ""
+db_password: ""
+db_host: localhost
+
+# ── Web server ────────────────────────────────────────────────────────────────
+webserver: nginx
+webserver_config_dir_nginx: /etc/nginx/sites-available
+webserver_enabled_dir_nginx: /etc/nginx/sites-enabled
+http_port: 80
+https_port: 443
+
+# ── Application (PHP/Node/Python) ─────────────────────────────────────────────
+app_port: 3000
+php_fpm_service: php8.2-fpm
+node_version: "20"
+
+# ── Systemd service (optionnel) ────────────────────────────────────────────────
+systemd_service_name: "{{ project_name }}"
+systemd_service_enabled: true
+
+# ── Rollback ─────────────────────────────────────────────────────────────────
+# Chemin de l'archive de rollback (généré automatiquement avant déploiement)
+rollback_archive: "{{ app_base_dir }}/{{ project_name }}_rollback.tar.gz"

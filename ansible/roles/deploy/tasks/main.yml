@@ -1,0 +1,167 @@
+---
+- name: Vérifier les variables obligatoires
+  ansible.builtin.assert:
+    that:
+      - project_name is defined and project_name | length > 0
+      - target_host is defined and target_host | length > 0
+    fail_msg: "project_name et target_host sont obligatoires"
+
+# ── Snapshot de rollback avant toute modification ─────────────────────────────
+- name: Vérifier si un déploiement précédent existe
+  ansible.builtin.stat:
+    path: "{{ app_base_dir }}/{{ project_name }}/current"
+  register: previous_deploy
+
+- name: Créer un snapshot de rollback de l'état actuel
+  ansible.builtin.archive:
+    path: "{{ app_base_dir }}/{{ project_name }}"
+    dest: "{{ rollback_archive }}"
+    format: gz
+    mode: "0600"
+  when: previous_deploy.stat.exists
+
+# ── Préparer la structure de répertoires ─────────────────────────────────────
+- name: Créer l'arborescence de déploiement (releases / shared / current)
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: "0755"
+  loop:
+    - "{{ app_base_dir }}/{{ project_name }}"
+    - "{{ app_base_dir }}/{{ project_name }}/releases"
+    - "{{ app_base_dir }}/{{ project_name }}/shared"
+    - "{{ app_base_dir }}/{{ project_name }}/shared/logs"
+    - "{{ app_base_dir }}/{{ project_name }}/shared/storage"
+
+- name: Définir le répertoire de la release courante
+  ansible.builtin.set_fact:
+    release_dir: "{{ app_base_dir }}/{{ project_name }}/releases/{{ lookup('pipe', 'date +%Y%m%d%H%M%S') }}"
+
+- name: Créer le répertoire de la nouvelle release
+  ansible.builtin.file:
+    path: "{{ release_dir }}"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: "0755"
+
+# ── Récupérer les sources ─────────────────────────────────────────────────────
+- name: Cloner le dépôt Git
+  ansible.builtin.git:
+    repo: "{{ git_repo }}"
+    dest: "{{ release_dir }}"
+    version: "{{ git_branch }}"
+    depth: "{{ git_depth }}"
+    force: true
+  when: deploy_method == "git" and git_repo | length > 0
+  become_user: "{{ app_user }}"
+
+- name: Télécharger et extraire l'archive de déploiement
+  ansible.builtin.unarchive:
+    src: "{{ deploy_archive_url }}"
+    dest: "{{ release_dir }}"
+    remote_src: true
+  when: deploy_method == "archive" and deploy_archive_url | length > 0
+
+# ── Lier les ressources partagées ────────────────────────────────────────────
+- name: Créer les liens symboliques vers shared/
+  ansible.builtin.file:
+    src: "{{ app_base_dir }}/{{ project_name }}/shared/{{ item }}"
+    dest: "{{ release_dir }}/{{ item }}"
+    state: link
+    force: true
+  loop:
+    - logs
+    - storage
+
+# ── Déploiement selon le tech_stack ──────────────────────────────────────────
+- name: Installer les dépendances PHP (Composer)
+  ansible.builtin.command:
+    cmd: composer install --no-dev --optimize-autoloader
+    chdir: "{{ release_dir }}"
+  when: "'php' in components"
+  become_user: "{{ app_user }}"
+  environment:
+    COMPOSER_ALLOW_SUPERUSER: "1"
+
+- name: Installer les dépendances Node.js
+  ansible.builtin.command:
+    cmd: npm ci --production
+    chdir: "{{ release_dir }}"
+  when: "'nodejs' in components"
+  become_user: "{{ app_user }}"
+
+- name: Installer les dépendances Python
+  ansible.builtin.pip:
+    requirements: "{{ release_dir }}/requirements.txt"
+    virtualenv: "{{ release_dir }}/.venv"
+    virtualenv_command: python3 -m venv
+  when: "'python' in components"
+
+# ── Basculer le lien current ──────────────────────────────────────────────────
+- name: Faire pointer current → nouvelle release
+  ansible.builtin.file:
+    src: "{{ release_dir }}"
+    dest: "{{ app_base_dir }}/{{ project_name }}/current"
+    state: link
+    force: true
+
+# ── Configuration nginx ───────────────────────────────────────────────────────
+- name: Déployer le vhost nginx
+  ansible.builtin.template:
+    src: nginx_vhost.j2
+    dest: "{{ webserver_config_dir_nginx }}/{{ project_name }}"
+    mode: "0644"
+  when: "'nginx' in components"
+  notify: Reload nginx
+
+- name: Activer le vhost nginx (sites-enabled)
+  ansible.builtin.file:
+    src: "{{ webserver_config_dir_nginx }}/{{ project_name }}"
+    dest: "{{ webserver_enabled_dir_nginx }}/{{ project_name }}"
+    state: link
+    force: true
+  when: "'nginx' in components"
+  notify: Reload nginx
+
+# ── Redémarrer le service applicatif ─────────────────────────────────────────
+- name: Redémarrer le service systemd du projet
+  ansible.builtin.service:
+    name: "{{ systemd_service_name }}"
+    state: restarted
+    enabled: "{{ systemd_service_enabled }}"
+  when: "'systemd' in components"
+  ignore_errors: true
+  notify: Restart app service
+
+# ── Nettoyer les vieilles releases (garder les 5 dernières) ──────────────────
+- name: Lister les releases existantes
+  ansible.builtin.find:
+    paths: "{{ app_base_dir }}/{{ project_name }}/releases"
+    file_type: directory
+  register: all_releases
+
+- name: Supprimer les releases obsolètes (> 5)
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: >-
+    {{
+      all_releases.files
+      | sort(attribute='mtime')
+      | list
+      | difference(
+          all_releases.files
+          | sort(attribute='mtime', reverse=True)
+          | list[:5]
+        )
+    }}
+  when: all_releases.files | length > 5
+
+- name: Afficher le résultat du déploiement
+  ansible.builtin.debug:
+    msg: >-
+      Déploiement de {{ project_name }} vers {{ target_host }}
+      réussi — release : {{ release_dir }}
