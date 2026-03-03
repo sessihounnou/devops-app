@@ -1,0 +1,90 @@
+---
+- name: Vérifier que project_domain est défini
+  ansible.builtin.assert:
+    that:
+      - project_domain is defined
+      - project_domain | length > 0
+    fail_msg: "La variable project_domain est obligatoire"
+
+# ── Installer BIND si absent ───────────────────────────────────────────────────
+- name: Installer BIND (Debian/Ubuntu)
+  ansible.builtin.apt:
+    name: bind9
+    state: present
+    update_cache: true
+  when: ansible_os_family == "Debian"
+
+- name: Installer BIND (RHEL/CentOS/Rocky)
+  ansible.builtin.dnf:
+    name: bind
+    state: present
+  when: ansible_os_family == "RedHat"
+
+- name: S'assurer que le service BIND est activé
+  ansible.builtin.service:
+    name: "{{ bind_service }}"
+    enabled: true
+    state: started
+
+# ── Préparer le répertoire des zones ──────────────────────────────────────────
+- name: Créer le répertoire des zones si inexistant
+  ansible.builtin.file:
+    path: "{{ bind_zone_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+# ── Calculer le numéro de série ───────────────────────────────────────────────
+- name: Calculer le numéro de série (YYYYMMDDhh)
+  ansible.builtin.set_fact:
+    dns_zone_serial: "{{ lookup('pipe', 'date +%Y%m%d%H') }}"
+  when: zone_serial == ""
+
+- name: Utiliser le numéro de série fourni
+  ansible.builtin.set_fact:
+    dns_zone_serial: "{{ zone_serial }}"
+  when: zone_serial != ""
+
+# ── Générer le fichier de zone ────────────────────────────────────────────────
+- name: Déployer le fichier de zone DNS pour {{ project_domain }}
+  ansible.builtin.template:
+    src: zone.j2
+    dest: "{{ bind_zone_dir }}/db.{{ project_domain }}"
+    owner: root
+    group: root
+    mode: "0644"
+    validate: named-checkzone {{ project_domain }} %s
+  notify: Reload BIND
+
+# ── Déclarer la zone dans named.conf.local ────────────────────────────────────
+- name: Vérifier si la zone est déjà déclarée dans named.conf.local
+  ansible.builtin.command:
+    cmd: grep -c "zone \"{{ project_domain }}\"" {{ bind_conf_dir }}/named.conf.local
+  register: zone_declared
+  changed_when: false
+  failed_when: zone_declared.rc > 1
+
+- name: Ajouter la déclaration de zone dans named.conf.local
+  ansible.builtin.blockinfile:
+    path: "{{ bind_conf_dir }}/named.conf.local"
+    marker: "# {mark} ANSIBLE MANAGED BLOCK {{ project_domain }}"
+    block: |
+      zone "{{ project_domain }}" {
+          type master;
+          file "{{ bind_zone_dir }}/db.{{ project_domain }}";
+      };
+    create: true
+  when: zone_declared.stdout == "0"
+  notify: Reload BIND
+
+# ── Valider la configuration globale ─────────────────────────────────────────
+- name: Valider la configuration BIND complète
+  ansible.builtin.command: named-checkconf
+  changed_when: false
+  register: bind_check
+  failed_when: bind_check.rc != 0
+
+- name: Afficher le résultat
+  ansible.builtin.debug:
+    msg: "Zone DNS {{ project_domain }} appliquée avec succès (serial: {{ dns_zone_serial }})"

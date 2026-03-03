@@ -1,0 +1,23 @@
+; Zone file pour {{ project_domain }}
+; Généré par AnsibleFlow le {{ ansible_date_time.iso8601 }}
+$TTL {{ default_ttl }}
+
+@   IN  SOA ns1.{{ project_domain }}. admin.{{ project_domain }}. (
+            {{ dns_zone_serial }}  ; Serial
+            3600                  ; Refresh
+            1800                  ; Retry
+            604800                ; Expire
+            300                   ; Negative TTL
+        )
+
+; Serveurs de noms
+@   IN  NS  ns1.{{ project_domain }}.
+@   IN  NS  ns2.{{ project_domain }}.
+
+{% for record in dns_records %}
+{% if record.type == 'MX' %}
+{{ record.name | default('@') }}  {{ record.ttl | default(default_ttl) }}  IN  {{ record.type }}  {{ record.priority | default(10) }}  {{ record.value }}
+{% else %}
+{{ record.name | default('@') }}  {{ record.ttl | default(default_ttl) }}  IN  {{ record.type }}  {{ record.value }}
+{% endif %}
+{% endfor %}

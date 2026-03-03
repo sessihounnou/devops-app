@@ -1,0 +1,35 @@
+---
+# Valeurs par défaut du rôle dns
+
+# Domaine du projet (passé en extra_vars depuis AnsibleFlow)
+project_domain: ""
+project_name: ""
+
+# Liste des enregistrements DNS à appliquer
+# Format attendu depuis l'API :
+# dns_records:
+#   - type: A
+#     name: "@"
+#     value: "1.2.3.4"
+#     ttl: 3600
+#   - type: CNAME
+#     name: "www"
+#     value: "mon-domaine.fr."
+#     ttl: 3600
+#   - type: MX
+#     name: "@"
+#     value: "mail.mon-domaine.fr."
+#     ttl: 3600
+#     priority: 10
+dns_records: []
+
+# TTL par défaut si non spécifié
+default_ttl: 3600
+
+# Numéro de série de zone (sera calculé dynamiquement si vide)
+zone_serial: ""
+
+# Service DNS sur la cible
+bind_service: named
+bind_zone_dir: /etc/bind/zones
+bind_conf_dir: /etc/bind

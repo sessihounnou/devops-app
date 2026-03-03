@@ -1,0 +1,14 @@
+---
+# Variables internes du rôle (priorité haute, ne pas surcharger)
+
+# Numéro de série calculé à partir de la date/heure courante
+dns_serial_format: "%Y%m%d%H"
+
+# Paquets BIND selon la distribution
+bind_packages:
+  Debian: bind9
+  Ubuntu: bind9
+  RedHat: bind
+  CentOS: bind
+  Rocky: bind
+  AlmaLinux: bind
