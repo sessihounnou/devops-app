@@ -1,0 +1,178 @@
+---
+- name: Vérifier les variables obligatoires
+  ansible.builtin.assert:
+    that:
+      - project_name is defined and project_name | length > 0
+      - backup_archive_path is defined and backup_archive_path | length > 0
+    fail_msg: "project_name et backup_archive_path sont obligatoires"
+
+- name: Vérifier que l'archive existe
+  ansible.builtin.stat:
+    path: "{{ backup_archive_path }}"
+  register: archive_stat
+
+- name: Échouer si l'archive est introuvable
+  ansible.builtin.fail:
+    msg: "Archive introuvable : {{ backup_archive_path }}"
+  when: not archive_stat.stat.exists
+
+# ── Snapshot de sécurité avant restauration ───────────────────────────────────
+- name: Vérifier si un déploiement courant existe
+  ansible.builtin.stat:
+    path: "{{ app_base_dir }}/{{ project_name }}"
+  register: current_app
+
+- name: Créer un snapshot de sécurité avant écrasement
+  ansible.builtin.archive:
+    path: "{{ app_base_dir }}/{{ project_name }}"
+    dest: "/tmp/{{ project_name }}_pre_restore_{{ lookup('pipe', 'date +%Y%m%d%H%M%S') }}.tar.gz"
+    format: gz
+    mode: "0600"
+  when: current_app.stat.exists
+
+# ── Extraction de l'archive ───────────────────────────────────────────────────
+- name: Créer le répertoire temporaire de restauration
+  ansible.builtin.file:
+    path: "{{ restore_tmp_dir }}/{{ project_name }}"
+    state: directory
+    mode: "0700"
+
+- name: Extraire l'archive principale
+  ansible.builtin.unarchive:
+    src: "{{ backup_archive_path }}"
+    dest: "{{ restore_tmp_dir }}/{{ project_name }}"
+    remote_src: true
+    extra_opts: ["--strip-components=0"]
+
+# ── Restauration des fichiers applicatifs ─────────────────────────────────────
+- name: Trouver l'archive des fichiers applicatifs dans l'archive extraite
+  ansible.builtin.find:
+    paths: "{{ restore_tmp_dir }}/{{ project_name }}"
+    patterns: "app_*.tar.*"
+  register: app_archives
+
+- name: Restaurer les fichiers applicatifs
+  ansible.builtin.unarchive:
+    src: "{{ app_archives.files[0].path }}"
+    dest: "{{ app_base_dir }}"
+    remote_src: true
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+  when: app_archives.files | length > 0
+
+# ── Restauration base MySQL ───────────────────────────────────────────────────
+- name: Trouver le dump MySQL dans l'archive extraite
+  ansible.builtin.find:
+    paths: "{{ restore_tmp_dir }}/{{ project_name }}"
+    patterns: "db_*.sql*"
+  register: db_dumps
+  when: db_type == "mysql" and db_name | length > 0
+
+- name: Décompresser le dump MySQL si compressé
+  ansible.builtin.command:
+    cmd: "gunzip -f {{ db_dumps.files[0].path }}"
+  when: >
+    db_type == "mysql" and db_name | length > 0
+    and db_dumps.files | length > 0
+    and db_dumps.files[0].path.endswith('.gz')
+  register: decompress_result
+  changed_when: decompress_result.rc == 0
+
+- name: Supprimer et recréer la base MySQL avant restauration
+  community.mysql.mysql_db:
+    name: "{{ db_name }}"
+    state: absent
+    login_user: "{{ db_user }}"
+    login_password: "{{ db_password }}"
+    login_host: "{{ db_host }}"
+  when: db_type == "mysql" and db_name | length > 0 and db_drop_before_restore
+  no_log: true
+
+- name: Recréer la base MySQL
+  community.mysql.mysql_db:
+    name: "{{ db_name }}"
+    state: present
+    login_user: "{{ db_user }}"
+    login_password: "{{ db_password }}"
+    login_host: "{{ db_host }}"
+  when: db_type == "mysql" and db_name | length > 0
+  no_log: true
+
+- name: Importer le dump MySQL
+  community.mysql.mysql_db:
+    name: "{{ db_name }}"
+    state: import
+    target: "{{ restore_tmp_dir }}/{{ project_name }}/db_{{ project_name }}.sql"
+    login_user: "{{ db_user }}"
+    login_password: "{{ db_password }}"
+    login_host: "{{ db_host }}"
+  when: db_type == "mysql" and db_name | length > 0 and db_dumps.files | length > 0
+  no_log: true
+
+# ── Restauration base PostgreSQL ──────────────────────────────────────────────
+- name: Trouver le dump PostgreSQL dans l'archive extraite
+  ansible.builtin.find:
+    paths: "{{ restore_tmp_dir }}/{{ project_name }}"
+    patterns: "db_*.sql*"
+  register: pg_dumps
+  when: db_type == "postgresql" and db_name | length > 0
+
+- name: Supprimer et recréer la base PostgreSQL avant restauration
+  community.postgresql.postgresql_db:
+    name: "{{ db_name }}"
+    state: absent
+    login_user: "{{ db_user }}"
+    login_password: "{{ db_password }}"
+    login_host: "{{ db_host }}"
+  when: db_type == "postgresql" and db_name | length > 0 and db_drop_before_restore
+  no_log: true
+  become_user: postgres
+
+- name: Recréer la base PostgreSQL
+  community.postgresql.postgresql_db:
+    name: "{{ db_name }}"
+    state: present
+    login_user: "{{ db_user }}"
+    login_password: "{{ db_password }}"
+    login_host: "{{ db_host }}"
+  when: db_type == "postgresql" and db_name | length > 0
+  no_log: true
+  become_user: postgres
+
+- name: Importer le dump PostgreSQL
+  community.postgresql.postgresql_db:
+    name: "{{ db_name }}"
+    state: restore
+    target: "{{ pg_dumps.files[0].path }}"
+    login_user: "{{ db_user }}"
+    login_password: "{{ db_password }}"
+    login_host: "{{ db_host }}"
+  when: db_type == "postgresql" and db_name | length > 0 and pg_dumps.files | length > 0
+  no_log: true
+  become_user: postgres
+
+# ── Corriger les permissions ──────────────────────────────────────────────────
+- name: Corriger les permissions du répertoire applicatif
+  ansible.builtin.file:
+    path: "{{ app_base_dir }}/{{ project_name }}"
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    recurse: true
+
+# ── Redémarrer les services ───────────────────────────────────────────────────
+- name: Redémarrer les services après restauration
+  ansible.builtin.service:
+    name: "{{ item }}"
+    state: restarted
+  loop: "{{ services_to_restart }}"
+  ignore_errors: true
+
+# ── Nettoyage ─────────────────────────────────────────────────────────────────
+- name: Supprimer les fichiers temporaires de restauration
+  ansible.builtin.file:
+    path: "{{ restore_tmp_dir }}/{{ project_name }}"
+    state: absent
+
+- name: Restauration terminée
+  ansible.builtin.debug:
+    msg: "Restauration de {{ project_name }} depuis {{ backup_archive_path }} réussie"

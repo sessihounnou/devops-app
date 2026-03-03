@@ -1,0 +1,30 @@
+---
+project_name: ""
+project_domain: ""
+
+# Chemin complet de l'archive à restaurer
+backup_archive_path: ""
+
+# Répertoire applicatif cible
+app_base_dir: /var/www
+app_user: www-data
+app_group: www-data
+
+# Répertoire temporaire pour l'extraction
+restore_tmp_dir: /tmp/ansibleflow_restore
+
+# ── Base de données ────────────────────────────────────────────────────────────
+db_type: none
+db_name: ""
+db_user: ""
+db_password: ""
+db_host: localhost
+db_port_mysql: 3306
+db_port_pgsql: 5432
+
+# Écraser la base existante avant restauration (DROP + CREATE)
+db_drop_before_restore: true
+
+# ── Services à redémarrer après restauration ──────────────────────────────────
+services_to_restart:
+  - nginx
