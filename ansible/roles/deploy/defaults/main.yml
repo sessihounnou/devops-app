@@ -16,6 +16,12 @@ components:
   - application
   - nginx
 
+# Stratégie de déploiement :
+#   - git_app        : déploiement applicatif classique (release/current)
+#   - docker_compose : app existante avec Dockerfile/docker-compose dans le repo
+#   - wordpress      : stack WordPress + MariaDB générée automatiquement
+deploy_strategy: git_app
+
 # ── Source du déploiement ─────────────────────────────────────────────────────
 # Méthode : git | archive
 deploy_method: git
@@ -47,6 +53,19 @@ https_port: 443
 app_port: 3000
 php_fpm_service: php8.2-fpm
 node_version: "20"
+
+# ── Docker / Compose ───────────────────────────────────────────────────────────
+docker_compose_file: docker-compose.yml
+docker_compose_project_name: "{{ project_name }}"
+
+# ── WordPress (mode deploy_strategy=wordpress) ────────────────────────────────
+wordpress_app_image: wordpress:6.5-apache
+wordpress_db_image: mariadb:11.4
+wordpress_app_port: 8080
+wordpress_db_name: wordpress
+wordpress_db_user: wordpress
+wordpress_db_password: wordpress
+wordpress_db_root_password: rootchange
 
 # ── Systemd service (optionnel) ────────────────────────────────────────────────
 systemd_service_name: "{{ project_name }}"

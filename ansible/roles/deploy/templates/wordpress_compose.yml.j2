@@ -1,0 +1,30 @@
+services:
+  db:
+    image: {{ wordpress_db_image }}
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: {{ wordpress_db_name }}
+      MYSQL_USER: {{ wordpress_db_user }}
+      MYSQL_PASSWORD: {{ wordpress_db_password }}
+      MYSQL_ROOT_PASSWORD: {{ wordpress_db_root_password }}
+    volumes:
+      - db_data:/var/lib/mysql
+
+  wordpress:
+    image: {{ wordpress_app_image }}
+    restart: unless-stopped
+    depends_on:
+      - db
+    ports:
+      - "127.0.0.1:{{ wordpress_app_port }}:80"
+    environment:
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_NAME: {{ wordpress_db_name }}
+      WORDPRESS_DB_USER: {{ wordpress_db_user }}
+      WORDPRESS_DB_PASSWORD: {{ wordpress_db_password }}
+    volumes:
+      - wp_data:/var/www/html
+
+volumes:
+  db_data:
+  wp_data:

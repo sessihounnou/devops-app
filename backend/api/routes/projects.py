@@ -23,6 +23,10 @@ class ProjectCreate(BaseModel):
     environment: Environment
     ssh_user: str = "root"
     ssh_port: int = 22
+    ssh_private_key: Optional[str] = None
+    repo_url: Optional[str] = None
+    repo_branch: str = "main"
+    env_file_content: Optional[str] = None
     ansible_extra_vars: Optional[dict] = None
 
 
@@ -35,6 +39,10 @@ class ProjectUpdate(BaseModel):
     environment: Optional[Environment] = None
     ssh_user: Optional[str] = None
     ssh_port: Optional[int] = None
+    ssh_private_key: Optional[str] = None
+    repo_url: Optional[str] = None
+    repo_branch: Optional[str] = None
+    env_file_content: Optional[str] = None
     ansible_extra_vars: Optional[dict] = None
 
 
@@ -48,6 +56,10 @@ class ProjectResponse(BaseModel):
     environment: Environment
     ssh_user: str
     ssh_port: int
+    # ssh_private_key intentionally excluded from response (sensitive)
+    repo_url: Optional[str]
+    repo_branch: str
+    env_file_content: Optional[str]
     last_deploy_status: Optional[str]
     last_backup_at: Optional[str]
     ansible_extra_vars: Optional[dict]
@@ -170,14 +182,18 @@ def _generate_ansible_structure(project: Project) -> None:
 
     host_vars_file = host_vars_dir / "vars.yml"
     try:
-        host_vars_file.write_text(
-            f"---\n"
-            f"project_name: {project.name}\n"
-            f"project_domain: {project.domain}\n"
-            f"project_environment: {project.environment.value}\n"
-            f"project_tech_stack: {project.tech_stack.value}\n"
-            f"ansible_user: {project.ssh_user}\n"
-            f"ansible_port: {project.ssh_port}\n"
-        )
+        lines = [
+            "---",
+            f"project_name: {project.name}",
+            f"project_domain: {project.domain}",
+            f"project_environment: {project.environment.value}",
+            f"project_tech_stack: {project.tech_stack.value}",
+            f"ansible_user: {project.ssh_user}",
+            f"ansible_port: {project.ssh_port}",
+        ]
+        if project.repo_url:
+            lines.append(f"git_repo: {project.repo_url}")
+            lines.append(f"git_branch: {project.repo_branch}")
+        host_vars_file.write_text("\n".join(lines) + "\n")
     except Exception as exc:
         logger.error("Failed to generate Ansible host_vars for project %s: %s", project.name, exc)

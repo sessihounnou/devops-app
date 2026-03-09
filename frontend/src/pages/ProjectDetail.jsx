@@ -3,7 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import {
   getProject, getDNSRecords, createDNSRecord, deleteDNSRecord, applyDNS,
-  getBackups, triggerBackup
+  getBackups, triggerBackup, updateProject
 } from '../services/api'
 import StatusBadge from '../components/StatusBadge'
 import Modal from '../components/Modal'
@@ -20,12 +20,38 @@ export default function ProjectDetail() {
   const [newDns, setNewDns]       = useState({ record_type: 'A', name: '', value: '', ttl: 3600 })
   const [logPanel, setLogPanel]   = useState({ open: false, jobId: null, title: '' })
   const [selectedDns, setSelectedDns] = useState([])
+  const [sshKey, setSshKey]       = useState('')
+  const [envContent, setEnvContent] = useState('')
+  const [repoUrl, setRepoUrl]     = useState('')
+  const [repoBranch, setRepoBranch] = useState('main')
+  const [savingConfig, setSavingConfig] = useState(false)
 
   useEffect(() => {
-    getProject(id).then(r => setProject(r.data)).catch(() => toast.error('Projet introuvable'))
+    getProject(id).then(r => {
+      setProject(r.data)
+      setEnvContent(r.data.env_file_content || '')
+      setRepoUrl(r.data.repo_url || '')
+      setRepoBranch(r.data.repo_branch || 'main')
+    }).catch(() => toast.error('Projet introuvable'))
     getDNSRecords(id).then(r => setDns(r.data)).catch(() => {})
     getBackups(id, { per_page: 10 }).then(r => setBackups(r.data.items)).catch(() => {})
   }, [id])
+
+  const handleSaveConfig = async () => {
+    setSavingConfig(true)
+    try {
+      const payload = {
+        repo_url: repoUrl.trim(),
+        repo_branch: repoBranch.trim() || 'main',
+        env_file_content: envContent,
+      }
+      if (sshKey.trim()) payload.ssh_private_key = sshKey.trim()
+      await updateProject(id, payload)
+      setSshKey('')
+      toast.success('Configuration sauvegardée')
+    } catch { toast.error('Erreur lors de la sauvegarde') }
+    finally { setSavingConfig(false) }
+  }
 
   const handleBackup = async () => {
     try {
@@ -67,7 +93,7 @@ export default function ProjectDetail() {
     <div className="flex items-center justify-center h-64 text-gray-400">Chargement...</div>
   )
 
-  const tabs = ['overview', 'dns', 'backups']
+  const tabs = ['overview', 'dns', 'backups', 'config']
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -133,7 +159,7 @@ export default function ProjectDetail() {
                 : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
-            {t === 'overview' ? 'Aperçu' : t === 'dns' ? 'DNS' : 'Backups'}
+            {t === 'overview' ? 'Aperçu' : t === 'dns' ? 'DNS' : t === 'backups' ? 'Backups' : 'SSH & Env'}
           </button>
         ))}
       </div>
@@ -245,6 +271,87 @@ export default function ProjectDetail() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Tab: SSH & Env */}
+      {tab === 'config' && (
+        <div className="space-y-6">
+          {/* Repo Git */}
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <h3 className="text-sm font-medium text-gray-700 mb-4">Repository Git</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">URL du repository</label>
+                <input
+                  value={repoUrl}
+                  onChange={e => setRepoUrl(e.target.value)}
+                  placeholder="https://github.com/vous/mon-projet"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Branche</label>
+                <input
+                  value={repoBranch}
+                  onChange={e => setRepoBranch(e.target.value)}
+                  placeholder="main"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Clé SSH */}
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <h3 className="text-sm font-medium text-gray-700 mb-1">Clé SSH privée</h3>
+            <p className="text-xs text-gray-400 mb-4">
+              Collez ici la clé privée permettant de se connecter au serveur <span className="font-mono">{project.server_ip}</span>.
+              La clé actuelle est masquée. Laissez vide pour conserver l'existante.
+            </p>
+            <textarea
+              rows={7}
+              value={sshKey}
+              onChange={e => setSshKey(e.target.value)}
+              placeholder={"-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1...\n-----END OPENSSH PRIVATE KEY-----"}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-brand-500"
+              spellCheck={false}
+            />
+          </div>
+
+          {/* Variables d'environnement */}
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <h3 className="text-sm font-medium text-gray-700 mb-1">Variables d'environnement (.env)</h3>
+            <p className="text-xs text-gray-400 mb-4">
+              Ce contenu sera écrit dans <span className="font-mono">/opt/{project.name}/.env</span> avant chaque déploiement.
+            </p>
+            <textarea
+              rows={10}
+              value={envContent}
+              onChange={e => setEnvContent(e.target.value)}
+              placeholder={"DATABASE_URL=postgresql://user:pass@localhost/db\nREDIS_URL=redis://localhost:6379\nSECRET_KEY=changeme"}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-brand-500"
+              spellCheck={false}
+            />
+            {envContent && (
+              <button
+                onClick={() => setEnvContent('')}
+                className="mt-1 text-xs text-gray-400 hover:text-red-500"
+              >
+                Effacer
+              </button>
+            )}
+          </div>
+
+          <div className="flex justify-end">
+            <button
+              onClick={handleSaveConfig}
+              disabled={savingConfig}
+              className="bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-6 py-2 rounded-lg transition-colors disabled:opacity-60"
+            >
+              {savingConfig ? 'Sauvegarde...' : 'Sauvegarder'}
+            </button>
+          </div>
         </div>
       )}
 

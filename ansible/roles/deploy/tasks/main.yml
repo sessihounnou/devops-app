@@ -4,7 +4,8 @@
     that:
       - project_name is defined and project_name | length > 0
       - target_host is defined and target_host | length > 0
-    fail_msg: "project_name et target_host sont obligatoires"
+      - deploy_strategy in ['git_app', 'docker_compose', 'wordpress']
+    fail_msg: "project_name, target_host et une deploy_strategy valide sont obligatoires"
 
 # ── Snapshot de rollback avant toute modification ─────────────────────────────
 - name: Vérifier si un déploiement précédent existe
@@ -46,6 +47,17 @@
     owner: "{{ app_user }}"
     group: "{{ app_group }}"
     mode: "0755"
+  when: deploy_strategy in ['git_app', 'docker_compose']
+
+# ── Vérifications source Git si nécessaire ───────────────────────────────────
+- name: Vérifier que git_repo est défini pour un déploiement basé Git
+  ansible.builtin.fail:
+    msg: >-
+      Le champ Repository Git est obligatoire pour deploy_strategy={{ deploy_strategy }}.
+      Ajoutez repo_url dans le projet avant de relancer le déploiement.
+  when:
+    - deploy_strategy in ['git_app', 'docker_compose']
+    - git_repo is not defined or git_repo | length == 0
 
 # ── Récupérer les sources ─────────────────────────────────────────────────────
 - name: Cloner le dépôt Git
@@ -55,7 +67,7 @@
     version: "{{ git_branch }}"
     depth: "{{ git_depth }}"
     force: true
-  when: deploy_method == "git" and git_repo | length > 0
+  when: deploy_strategy in ['git_app', 'docker_compose'] and deploy_method == 'git' and git_repo | length > 0
   become_user: "{{ app_user }}"
 
 - name: Télécharger et extraire l'archive de déploiement
@@ -63,50 +75,123 @@
     src: "{{ deploy_archive_url }}"
     dest: "{{ release_dir }}"
     remote_src: true
-  when: deploy_method == "archive" and deploy_archive_url | length > 0
+  when: deploy_strategy in ['git_app', 'docker_compose'] and deploy_method == 'archive' and deploy_archive_url | length > 0
 
-# ── Lier les ressources partagées ────────────────────────────────────────────
-- name: Créer les liens symboliques vers shared/
-  ansible.builtin.file:
-    src: "{{ app_base_dir }}/{{ project_name }}/shared/{{ item }}"
-    dest: "{{ release_dir }}/{{ item }}"
-    state: link
-    force: true
-  loop:
-    - logs
-    - storage
+- name: Écrire le fichier .env pour la release
+  ansible.builtin.copy:
+    content: "{{ env_file_content }}"
+    dest: "{{ release_dir }}/.env"
+    mode: "0600"
+  when:
+    - deploy_strategy in ['git_app', 'docker_compose']
+    - env_file_content is defined
+    - env_file_content != ""
+  no_log: true
 
-# ── Déploiement selon le tech_stack ──────────────────────────────────────────
-- name: Installer les dépendances PHP (Composer)
-  ansible.builtin.command:
-    cmd: composer install --no-dev --optimize-autoloader
-    chdir: "{{ release_dir }}"
-  when: "'php' in components"
-  become_user: "{{ app_user }}"
-  environment:
-    COMPOSER_ALLOW_SUPERUSER: "1"
+# ── Flux 1: application Git classique ────────────────────────────────────────
+- name: Déployer une application Git classique
+  when: deploy_strategy == 'git_app'
+  block:
+    - name: Créer les liens symboliques vers shared/
+      ansible.builtin.file:
+        src: "{{ app_base_dir }}/{{ project_name }}/shared/{{ item }}"
+        dest: "{{ release_dir }}/{{ item }}"
+        state: link
+        force: true
+      loop:
+        - logs
+        - storage
 
-- name: Installer les dépendances Node.js
-  ansible.builtin.command:
-    cmd: npm ci --production
-    chdir: "{{ release_dir }}"
-  when: "'nodejs' in components"
-  become_user: "{{ app_user }}"
+    - name: Installer les dépendances PHP (Composer)
+      ansible.builtin.command:
+        cmd: composer install --no-dev --optimize-autoloader
+        chdir: "{{ release_dir }}"
+      when: "'php' in components"
+      become_user: "{{ app_user }}"
+      environment:
+        COMPOSER_ALLOW_SUPERUSER: "1"
 
-- name: Installer les dépendances Python
-  ansible.builtin.pip:
-    requirements: "{{ release_dir }}/requirements.txt"
-    virtualenv: "{{ release_dir }}/.venv"
-    virtualenv_command: python3 -m venv
-  when: "'python' in components"
+    - name: Installer les dépendances Node.js
+      ansible.builtin.command:
+        cmd: npm ci --production
+        chdir: "{{ release_dir }}"
+      when: "'nodejs' in components"
+      become_user: "{{ app_user }}"
 
-# ── Basculer le lien current ──────────────────────────────────────────────────
-- name: Faire pointer current → nouvelle release
-  ansible.builtin.file:
-    src: "{{ release_dir }}"
-    dest: "{{ app_base_dir }}/{{ project_name }}/current"
-    state: link
-    force: true
+    - name: Installer les dépendances Python
+      ansible.builtin.pip:
+        requirements: "{{ release_dir }}/requirements.txt"
+        virtualenv: "{{ release_dir }}/.venv"
+        virtualenv_command: python3 -m venv
+      when: "'python' in components"
+
+    - name: Faire pointer current vers la nouvelle release
+      ansible.builtin.file:
+        src: "{{ release_dir }}"
+        dest: "{{ app_base_dir }}/{{ project_name }}/current"
+        state: link
+        force: true
+
+# ── Flux 2: application Docker/Compose existante ─────────────────────────────
+- name: Déployer une application Docker/Compose
+  when: deploy_strategy == 'docker_compose'
+  block:
+    - name: Vérifier la présence de Docker
+      ansible.builtin.command:
+        cmd: docker --version
+      register: docker_check
+      changed_when: false
+
+    - name: Vérifier la présence de Docker Compose
+      ansible.builtin.command:
+        cmd: docker compose version
+      register: docker_compose_check
+      changed_when: false
+
+    - name: Démarrer la stack applicative docker-compose
+      ansible.builtin.command:
+        cmd: docker compose -f {{ docker_compose_file }} up -d --build --remove-orphans
+        chdir: "{{ release_dir }}"
+
+    - name: Faire pointer current vers la release Docker
+      ansible.builtin.file:
+        src: "{{ release_dir }}"
+        dest: "{{ app_base_dir }}/{{ project_name }}/current"
+        state: link
+        force: true
+
+# ── Flux 3: WordPress managé ─────────────────────────────────────────────────
+- name: Déployer une stack WordPress
+  when: deploy_strategy == 'wordpress'
+  block:
+    - name: Vérifier la présence de Docker
+      ansible.builtin.command:
+        cmd: docker --version
+      changed_when: false
+
+    - name: Vérifier la présence de Docker Compose
+      ansible.builtin.command:
+        cmd: docker compose version
+      changed_when: false
+
+    - name: Créer le répertoire WordPress
+      ansible.builtin.file:
+        path: "{{ app_base_dir }}/{{ project_name }}/wordpress"
+        state: directory
+        owner: "{{ app_user }}"
+        group: "{{ app_group }}"
+        mode: "0755"
+
+    - name: Générer le docker-compose WordPress
+      ansible.builtin.template:
+        src: wordpress_compose.yml.j2
+        dest: "{{ app_base_dir }}/{{ project_name }}/wordpress/docker-compose.yml"
+        mode: "0644"
+
+    - name: Démarrer WordPress via docker-compose
+      ansible.builtin.command:
+        cmd: docker compose up -d --remove-orphans
+        chdir: "{{ app_base_dir }}/{{ project_name }}/wordpress"
 
 # ── Configuration nginx ───────────────────────────────────────────────────────
 - name: Déployer le vhost nginx
@@ -126,13 +211,15 @@
   when: "'nginx' in components"
   notify: Reload nginx
 
-# ── Redémarrer le service applicatif ─────────────────────────────────────────
+# ── Redémarrer le service applicatif (mode classique uniquement) ─────────────
 - name: Redémarrer le service systemd du projet
   ansible.builtin.service:
     name: "{{ systemd_service_name }}"
     state: restarted
     enabled: "{{ systemd_service_enabled }}"
-  when: "'systemd' in components"
+  when:
+    - deploy_strategy == 'git_app'
+    - "'systemd' in components"
   ignore_errors: true
   notify: Restart app service
 
@@ -164,4 +251,4 @@
   ansible.builtin.debug:
     msg: >-
       Déploiement de {{ project_name }} vers {{ target_host }}
-      réussi — release : {{ release_dir }}
+      réussi — stratégie : {{ deploy_strategy }}

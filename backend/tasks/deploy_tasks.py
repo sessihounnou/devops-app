@@ -42,6 +42,9 @@ async def _run_deployment_async(task, deployment_id: int) -> dict:
             "target_ssh_user": deployment.target_ssh_user,
             "target_environment": deployment.target_environment or project.environment.value,
             "components": deployment.components or [],
+            "git_repo": project.repo_url or "",
+            "git_branch": project.repo_branch or "main",
+            "env_file_content": project.env_file_content or "",
             **(project.ansible_extra_vars or {}),
         }
 
@@ -52,6 +55,7 @@ async def _run_deployment_async(task, deployment_id: int) -> dict:
                 playbook="deploy.yml",
                 host=deployment.target_host,
                 ssh_user=deployment.target_ssh_user,
+                ssh_private_key=project.ssh_private_key or None,
                 extra_vars=extra_vars,
                 job_id=job_id,
             )
@@ -101,6 +105,7 @@ async def _attempt_rollback(project: "Project", deployment: "Deployment") -> boo
             playbook="restore.yml",
             host=deployment.target_host,
             ssh_user=deployment.target_ssh_user,
+            ssh_private_key=project.ssh_private_key or None,
             extra_vars=rollback_vars,
             job_id=job_id,
         )

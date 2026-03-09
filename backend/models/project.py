@@ -2,7 +2,7 @@ import enum
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import String, Text, DateTime, Enum, JSON
+from sqlalchemy import String, Text, DateTime, Enum, JSON, Integer
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from core.database import Base
@@ -37,8 +37,13 @@ class Project(Base):
     environment: Mapped[Environment] = mapped_column(Enum(Environment), nullable=False)
     ssh_user: Mapped[str] = mapped_column(String(100), default="root", nullable=False)
     ssh_port: Mapped[int] = mapped_column(default=22, nullable=False)
-    # SSH key stored encrypted via Ansible Vault — path to vault-encrypted file
-    ssh_key_vault_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    # SSH private key content (PEM format) used by Ansible to connect to this server
+    ssh_private_key: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # GitHub / Git repo URL and branch for code deployment
+    repo_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    repo_branch: Mapped[str] = mapped_column(String(100), default="main", nullable=False)
+    # .env file content written on the server before deployment
+    env_file_content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     # Arbitrary extra vars passed to Ansible playbooks
     ansible_extra_vars: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     # Deployment status from last run

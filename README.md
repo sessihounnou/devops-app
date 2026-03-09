@@ -210,6 +210,34 @@ docker compose down -v
 
 ---
 
+## CI/CD GitHub Actions (déploiement Docker sur serveur)
+
+Un workflow est fourni dans [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml).
+
+Comportement:
+- Déclenchement automatique à chaque `push` sur `main` (ou manuel via `workflow_dispatch`)
+- Synchronisation du code vers le serveur via `rsync` sur SSH
+- Build et redémarrage des services directement sur le serveur:
+  - `docker compose up -d --build --remove-orphans`
+
+### Secrets GitHub à configurer
+
+Dans `Settings > Secrets and variables > Actions`, ajouter:
+
+- `SSH_HOST` : IP ou hostname du serveur
+- `SSH_PORT` : port SSH (ex: `22`)
+- `SSH_USER` : utilisateur SSH (ex: `root` ou `deploy`)
+- `SSH_PRIVATE_KEY` : clé privée SSH au format OpenSSH
+- `DEPLOY_PATH` : répertoire cible sur le serveur (ex: `/opt/ansibleflow`)
+- `COMPOSE_FILE` (optionnel) : fichier Compose (défaut: `docker-compose.yml`)
+
+### Prérequis serveur
+
+- Docker et Docker Compose installés
+- Utilisateur SSH autorisé à exécuter `docker compose`
+
+---
+
 ## Structure du projet
 
 ```

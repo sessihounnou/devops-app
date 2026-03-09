@@ -8,9 +8,11 @@
 #   - target_host         : IP ou hostname du serveur cible
 #   - target_ssh_user     : utilisateur SSH cible
 #   - target_environment  : production | staging | development
-#   - components          : liste des composants (application, nginx, database…)
-#   - deploy_method       : git | archive
-#   - git_repo / git_branch (si deploy_method == git)
+#   - components          : liste des composants
+#   - git_repo            : URL du repo GitHub (https://github.com/...)
+#   - git_branch          : branche à déployer (défaut: main)
+#   - env_file_content    : contenu du fichier .env à écrire sur le serveur
+#   - deploy_strategy     : git_app | docker_compose | wordpress
 
 - name: Déploiement de {{ project_name | default('inconnu') }} vers {{ target_host | default('cible') }}
   hosts: all
@@ -19,16 +21,21 @@
 
   vars:
     target_environment: "{{ target_environment | default('production') }}"
-    components: "{{ components | default(['application', 'nginx']) }}"
+    components: "{{ components | default(['application']) }}"
+    deploy_dir: "/opt/{{ project_name }}"
+    git_branch: "{{ git_branch | default('main') }}"
+    deploy_strategy: "{{ deploy_strategy | default('git_app') }}"
 
   pre_tasks:
     - name: Afficher les paramètres de déploiement
       ansible.builtin.debug:
         msg:
-          - "Projet      : {{ project_name }}"
-          - "Cible       : {{ inventory_hostname }}"
+          - "Projet        : {{ project_name }}"
+          - "Cible         : {{ inventory_hostname }}"
           - "Environnement : {{ target_environment }}"
-          - "Composants  : {{ components | join(', ') }}"
+          - "Repo          : {{ git_repo | default('non défini') }}"
+          - "Branche       : {{ git_branch }}"
+          - "Stratégie     : {{ deploy_strategy }}"
 
     - name: Vérifier la connectivité SSH vers le serveur cible
       ansible.builtin.ping:
@@ -42,6 +49,11 @@
       ansible.builtin.fail:
         msg: "Espace disque insuffisant : {{ free_space.stdout }} Mo disponibles (minimum 500 Mo)"
       when: free_space.stdout | int < 500
+
+    - name: Installer git si absent
+      ansible.builtin.package:
+        name: git
+        state: present
 
   roles:
     - role: deploy
