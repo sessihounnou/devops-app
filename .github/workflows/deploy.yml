@@ -65,9 +65,10 @@ jobs:
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
           COMPOSE_FILE: ${{ secrets.COMPOSE_FILE }}
           ENV_FILE_CONTENT: ${{ secrets.ENV_FILE_CONTENT }}
+          COMPOSE_PROJECT_NAME: ${{ secrets.COMPOSE_PROJECT_NAME }}
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" \
-            "DEPLOY_PATH='$DEPLOY_PATH' COMPOSE_FILE='${COMPOSE_FILE:-docker-compose.yml}' ENV_FILE_CONTENT='$ENV_FILE_CONTENT' bash -s" <<'REMOTE'
+            "DEPLOY_PATH='$DEPLOY_PATH' COMPOSE_FILE='${COMPOSE_FILE:-docker-compose.yml}' ENV_FILE_CONTENT='$ENV_FILE_CONTENT' COMPOSE_PROJECT_NAME='${COMPOSE_PROJECT_NAME:-ansibleflow}' bash -s" <<'REMOTE'
             set -e
 
             cd "$DEPLOY_PATH"
@@ -76,6 +77,10 @@ jobs:
               chmod 600 .env
             fi
             test -f .env
-            docker compose -f "${COMPOSE_FILE:-docker-compose.yml}" up -d --build --remove-orphans
-            docker compose -f "${COMPOSE_FILE:-docker-compose.yml}" ps
+            if ! docker compose -p "${COMPOSE_PROJECT_NAME}" -f "${COMPOSE_FILE:-docker-compose.yml}" up -d --build --remove-orphans; then
+              docker compose -p "${COMPOSE_PROJECT_NAME}" -f "${COMPOSE_FILE:-docker-compose.yml}" ps || true
+              docker compose -p "${COMPOSE_PROJECT_NAME}" -f "${COMPOSE_FILE:-docker-compose.yml}" logs --tail=200 || true
+              exit 1
+            fi
+            docker compose -p "${COMPOSE_PROJECT_NAME}" -f "${COMPOSE_FILE:-docker-compose.yml}" ps
           REMOTE
