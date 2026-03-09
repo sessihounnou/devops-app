@@ -27,7 +27,7 @@ jobs:
           test -n "${SSH_PRIVATE_KEY:-}"
           printf '%s\n' "${SSH_PRIVATE_KEY:-}" | tr -d '\r' > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          grep -q "BEGIN OPENSSH PRIVATE KEY" ~/.ssh/deploy_key
+          grep -Eq "BEGIN (OPENSSH|RSA|EC|DSA) PRIVATE KEY" ~/.ssh/deploy_key
           ssh-keygen -y -f ~/.ssh/deploy_key >/dev/null
 
       - name: Ensure deploy directory exists on server
@@ -64,12 +64,18 @@ jobs:
           SSH_USER: ${{ secrets.SSH_USER }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
           COMPOSE_FILE: ${{ secrets.COMPOSE_FILE }}
+          ENV_FILE_CONTENT: ${{ secrets.ENV_FILE_CONTENT }}
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" \
-            "DEPLOY_PATH='$DEPLOY_PATH' COMPOSE_FILE='${COMPOSE_FILE:-docker-compose.yml}' bash -s" <<'REMOTE'
+            "DEPLOY_PATH='$DEPLOY_PATH' COMPOSE_FILE='${COMPOSE_FILE:-docker-compose.yml}' ENV_FILE_CONTENT='$ENV_FILE_CONTENT' bash -s" <<'REMOTE'
             set -e
 
             cd "$DEPLOY_PATH"
+            if [ -n "${ENV_FILE_CONTENT:-}" ]; then
+              printf '%s\n' "$ENV_FILE_CONTENT" > .env
+              chmod 600 .env
+            fi
+            test -f .env
             docker compose -f "${COMPOSE_FILE:-docker-compose.yml}" up -d --build --remove-orphans
             docker compose -f "${COMPOSE_FILE:-docker-compose.yml}" ps
           REMOTE

@@ -232,6 +232,7 @@ Dans `Settings > Secrets and variables > Actions`, ajouter:
 - `SSH_PRIVATE_KEY` : clé privée SSH au format OpenSSH
 - `DEPLOY_PATH` : répertoire cible sur le serveur (ex: `/opt/ansibleflow`)
 - `COMPOSE_FILE` (optionnel) : fichier Compose (défaut: `docker-compose.yml`)
+- `ENV_FILE_CONTENT` : contenu complet du fichier `.env` à écrire sur le serveur avant `docker compose`
 
 ### Prérequis serveur
 
