@@ -6,11 +6,11 @@ Plateforme DevOps centralisée pour gérer vos projets, DNS, sauvegardes et dép
 
 ## Prérequis
 
-| Outil | Version minimale |
-|---|---|
-| Docker | 24+ |
-| Docker Compose | v2.20+ |
-| Git | 2.x |
+| Outil          | Version minimale |
+| -------------- | ---------------- |
+| Docker         | 24+              |
+| Docker Compose | v2.20+           |
+| Git            | 2.x              |
 
 > Aucune installation Python, Node.js ou Ansible n'est requise sur votre machine — tout tourne dans les conteneurs.
 
@@ -110,12 +110,12 @@ curl -X POST http://localhost:8000/api/auth/users \
 
 ## Accès aux interfaces
 
-| Interface | URL |
-|---|---|
-| Application web | http://localhost |
-| API REST | http://localhost:8000 |
-| Documentation Swagger | http://localhost:8000/docs |
-| Documentation ReDoc | http://localhost:8000/redoc |
+| Interface             | URL                         |
+| --------------------- | --------------------------- |
+| Application web       | http://localhost            |
+| API REST              | http://localhost:8000       |
+| Documentation Swagger | http://localhost:8000/docs  |
+| Documentation ReDoc   | http://localhost:8000/redoc |
 
 ---
 
@@ -130,6 +130,7 @@ curl -X POST http://localhost:8000/api/auth/login \
 ```
 
 Réponse :
+
 ```json
 {
   "access_token": "eyJ...",
@@ -215,6 +216,7 @@ docker compose down -v
 Un workflow est fourni dans [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml).
 
 Comportement:
+
 - Déclenchement automatique à chaque `push` sur `main` (ou manuel via `workflow_dispatch`)
 - Synchronisation du code vers le serveur via `rsync` sur SSH
 - Build et redémarrage des services directement sur le serveur:
@@ -268,11 +270,11 @@ ansibleflow/
 
 ## Rôles utilisateurs
 
-| Rôle | Permissions |
-|---|---|
-| `administrator` | Accès complet + gestion des utilisateurs |
-| `operator` | Créer/modifier projets, lancer sauvegardes et déploiements |
-| `observer` | Lecture seule (dashboard, historiques) |
+| Rôle            | Permissions                                                |
+| --------------- | ---------------------------------------------------------- |
+| `administrator` | Accès complet + gestion des utilisateurs                   |
+| `operator`      | Créer/modifier projets, lancer sauvegardes et déploiements |
+| `observer`      | Lecture seule (dashboard, historiques)                     |
 
 ---
 
@@ -280,23 +282,23 @@ ansibleflow/
 
 61 commits atomiques documentant chaque étape de construction du projet.
 
-| Catégorie | Commits | Description |
-|---|---|---|
-| `chore/docs` | 3 | .gitignore, README, requirements.txt |
-| `build(backend)` | 2 | Dockerfile, .dockerignore |
-| `feat(backend/core)` | 3 | Configuration, base de données, sécurité JWT |
-| `feat(backend/models)` | 5 | User, Project, Backup, Deployment, DNSRecord |
-| `feat(backend/services)` | 3 | ansible-runner, Vault, notifications |
-| `feat(backend/tasks)` | 4 | Celery app, tâches backup/deploy/DNS |
-| `feat(backend/api)` | 3 | Routes REST, WebSocket, entrypoint FastAPI |
-| `feat(ansible)` | 10 | ansible.cfg, inventaire, rôles (dns/backup/deploy/restore), playbooks |
-| `feat(frontend)` | 5 | Tooling Vite/Tailwind, index.html, App, main, CSS |
-| `feat(frontend/services)` | 3 | api.js (Axios + refresh JWT), websocket.js, auth.js |
-| `feat(frontend/components)` | 4 | Navbar, StatusBadge, Modal, LogViewer |
-| `feat(frontend/pages)` | 6 | Login, Dashboard, ProjectDetail, Deploy, Backups, AddProject |
-| `build(frontend)` | 3 | Dockerfile multi-stage, .dockerignore, nginx.conf |
-| `feat(docker)` | 2 | nginx.conf reverse proxy, docker-compose.yml |
-| `fix` | 5 | Corrections : naming conflict, worker build, proxy apt-get, healthcheck curl, email-validator |
+| Catégorie                   | Commits | Description                                                                                   |
+| --------------------------- | ------- | --------------------------------------------------------------------------------------------- |
+| `chore/docs`                | 3       | .gitignore, README, requirements.txt                                                          |
+| `build(backend)`            | 2       | Dockerfile, .dockerignore                                                                     |
+| `feat(backend/core)`        | 3       | Configuration, base de données, sécurité JWT                                                  |
+| `feat(backend/models)`      | 5       | User, Project, Backup, Deployment, DNSRecord                                                  |
+| `feat(backend/services)`    | 3       | ansible-runner, Vault, notifications                                                          |
+| `feat(backend/tasks)`       | 4       | Celery app, tâches backup/deploy/DNS                                                          |
+| `feat(backend/api)`         | 3       | Routes REST, WebSocket, entrypoint FastAPI                                                    |
+| `feat(ansible)`             | 10      | ansible.cfg, inventaire, rôles (dns/backup/deploy/restore), playbooks                         |
+| `feat(frontend)`            | 5       | Tooling Vite/Tailwind, index.html, App, main, CSS                                             |
+| `feat(frontend/services)`   | 3       | api.js (Axios + refresh JWT), websocket.js, auth.js                                           |
+| `feat(frontend/components)` | 4       | Navbar, StatusBadge, Modal, LogViewer                                                         |
+| `feat(frontend/pages)`      | 6       | Login, Dashboard, ProjectDetail, Deploy, Backups, AddProject                                  |
+| `build(frontend)`           | 3       | Dockerfile multi-stage, .dockerignore, nginx.conf                                             |
+| `feat(docker)`              | 2       | nginx.conf reverse proxy, docker-compose.yml                                                  |
+| `fix`                       | 5       | Corrections : naming conflict, worker build, proxy apt-get, healthcheck curl, email-validator |
 
 Consulter l'historique complet :
 
@@ -309,22 +311,26 @@ git log --oneline
 ## Dépannage
 
 **Le backend ne démarre pas**
+
 ```bash
 docker compose logs backend
 # Vérifier que DATABASE_URL correspond bien au service "db"
 ```
 
 **Les tâches Celery ne s'exécutent pas**
+
 ```bash
 docker compose logs worker
 # Vérifier que REDIS_URL est correct et que Redis est healthy
 ```
 
 **Erreur de connexion SSH dans un playbook**
+
 - Vérifier que `server_ip`, `ssh_user` et `ssh_port` du projet sont corrects
 - S'assurer que la clé SSH du conteneur `worker` est autorisée sur le serveur cible
 
 **Réinitialiser la base de données**
+
 ```bash
 docker compose down -v
 docker compose up -d
