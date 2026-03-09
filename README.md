@@ -256,6 +256,7 @@ Dans `Settings > Secrets and variables > Actions`, ajouter:
 - `COMPOSE_FILE` (optionnel) : fichier Compose (défaut: `docker-compose.yml`)
 - `COMPOSE_PROJECT_NAME` (optionnel) : nom de stack Compose fixe (défaut: `ansibleflow`)
 - `ENV_FILE_CONTENT` : contenu complet du fichier `.env` à écrire sur le serveur avant `docker compose`
+- `NO_CACHE_BUILD` (optionnel) : `true` pour reconstruire les images sans cache
 
 ### Où créer chaque variable/secrets
 
@@ -268,6 +269,7 @@ Dans `Settings > Secrets and variables > Actions`, ajouter:
 | `DEPLOY_PATH` | GitHub Secret | Dossier de déploiement sur le serveur |
 | `COMPOSE_FILE` | GitHub Secret (optionnel) | Fichier compose cible |
 | `COMPOSE_PROJECT_NAME` | GitHub Secret (optionnel) | Nom stable de stack (Portainer grouping) |
+| `NO_CACHE_BUILD` | GitHub Secret (optionnel) | Force `docker compose build --no-cache` |
 | `authorized_keys` | Serveur: `~/.ssh/authorized_keys` de `SSH_USER` | Contient la clé publique liée à `SSH_PRIVATE_KEY` |
 
 ### Prérequis serveur

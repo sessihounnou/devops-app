@@ -66,9 +66,10 @@ jobs:
           COMPOSE_FILE: ${{ secrets.COMPOSE_FILE }}
           ENV_FILE_CONTENT: ${{ secrets.ENV_FILE_CONTENT }}
           COMPOSE_PROJECT_NAME: ${{ secrets.COMPOSE_PROJECT_NAME }}
+          NO_CACHE_BUILD: ${{ secrets.NO_CACHE_BUILD }}
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" \
-            "DEPLOY_PATH='$DEPLOY_PATH' COMPOSE_FILE='${COMPOSE_FILE:-docker-compose.yml}' ENV_FILE_CONTENT='$ENV_FILE_CONTENT' COMPOSE_PROJECT_NAME='${COMPOSE_PROJECT_NAME:-ansibleflow}' bash -s" <<'REMOTE'
+            "DEPLOY_PATH='$DEPLOY_PATH' COMPOSE_FILE='${COMPOSE_FILE:-docker-compose.yml}' ENV_FILE_CONTENT='$ENV_FILE_CONTENT' COMPOSE_PROJECT_NAME='${COMPOSE_PROJECT_NAME:-ansibleflow}' NO_CACHE_BUILD='${NO_CACHE_BUILD:-false}' bash -s" <<'REMOTE'
             set -e
 
             cd "$DEPLOY_PATH"
@@ -77,7 +78,14 @@ jobs:
               chmod 600 .env
             fi
             test -f .env
-            if ! docker compose -p "${COMPOSE_PROJECT_NAME}" -f "${COMPOSE_FILE:-docker-compose.yml}" up -d --build --remove-orphans; then
+            BUILD_FLAGS="--pull"
+            if [ "${NO_CACHE_BUILD}" = "true" ]; then
+              BUILD_FLAGS="--pull --no-cache"
+            fi
+
+            docker compose -p "${COMPOSE_PROJECT_NAME}" -f "${COMPOSE_FILE:-docker-compose.yml}" build ${BUILD_FLAGS}
+
+            if ! docker compose -p "${COMPOSE_PROJECT_NAME}" -f "${COMPOSE_FILE:-docker-compose.yml}" up -d --force-recreate --remove-orphans; then
               docker compose -p "${COMPOSE_PROJECT_NAME}" -f "${COMPOSE_FILE:-docker-compose.yml}" ps || true
               docker compose -p "${COMPOSE_PROJECT_NAME}" -f "${COMPOSE_FILE:-docker-compose.yml}" logs --tail=200 || true
               exit 1
