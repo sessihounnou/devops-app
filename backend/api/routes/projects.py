@@ -177,11 +177,11 @@ def _generate_ansible_structure(project: Project) -> None:
     logger = logging.getLogger(__name__)
 
     base = Path(settings.ANSIBLE_BASE_PATH)
-    host_vars_dir = base / "inventory" / "host_vars" / project.server_ip
-    host_vars_dir.mkdir(parents=True, exist_ok=True)
-
-    host_vars_file = host_vars_dir / "vars.yml"
     try:
+        host_vars_dir = base / "inventory" / "host_vars" / project.server_ip
+        host_vars_dir.mkdir(parents=True, exist_ok=True)
+
+        host_vars_file = host_vars_dir / "vars.yml"
         lines = [
             "---",
             f"project_name: {project.name}",
