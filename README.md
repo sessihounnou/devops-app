@@ -40,8 +40,10 @@ SECRET_KEY=remplacer-par-une-vraie-cle-secrete
 # Mot de passe PostgreSQL
 POSTGRES_PASSWORD=un-mot-de-passe-fort
 
-# (Optionnel) Notifications Slack
-SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...
+# Admin par défaut créé automatiquement au démarrage (recommandé en production)
+DEFAULT_ADMIN_USERNAME=admin
+DEFAULT_ADMIN_EMAIL=admin@votredomaine.com
+DEFAULT_ADMIN_PASSWORD=motdepasse-fort
 ```
 
 Renommer ensuite le fichier :
@@ -49,6 +51,36 @@ Renommer ensuite le fichier :
 ```bash
 mv .env.local .env
 ```
+
+### 2.b Référence complète des variables `.env`
+
+Ces variables sont lues par `docker compose` et les services backend/worker.
+Le fichier est créé localement dans `ansibleflow/.env` et, en CI/CD, transmis via le secret GitHub `ENV_FILE_CONTENT`.
+
+| Variable | Obligatoire | Description | Exemple |
+|---|---|---|---|
+| `POSTGRES_USER` | Oui | Utilisateur PostgreSQL | `ansibleflow` |
+| `POSTGRES_PASSWORD` | Oui | Mot de passe PostgreSQL | `motdepassefort` |
+| `POSTGRES_DB` | Oui | Base PostgreSQL | `ansibleflow` |
+| `DATABASE_URL` | Oui | URL SQLAlchemy backend | `postgresql+asyncpg://...` |
+| `REDIS_URL` | Oui | URL Redis backend | `redis://redis:6379/0` |
+| `CELERY_BROKER_URL` | Oui | Broker Celery | `redis://redis:6379/0` |
+| `CELERY_RESULT_BACKEND` | Oui | Backend résultats Celery | `redis://redis:6379/1` |
+| `SECRET_KEY` | Oui | Clé JWT applicative | `openssl rand -hex 32` |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | Oui | Expiration access token | `60` |
+| `REFRESH_TOKEN_EXPIRE_DAYS` | Oui | Expiration refresh token | `7` |
+| `DEFAULT_ADMIN_USERNAME` | Recommandé prod | Username admin auto-créé au startup | `admin` |
+| `DEFAULT_ADMIN_EMAIL` | Recommandé prod | Email admin auto-créé au startup | `admin@votredomaine.com` |
+| `DEFAULT_ADMIN_PASSWORD` | Recommandé prod | Mot de passe admin auto-créé au startup | `motdepasse-fort` |
+| `ANSIBLE_BASE_PATH` | Oui | Chemin playbooks dans le conteneur | `/app/ansible` |
+| `ANSIBLE_VAULT_PASSWORD_FILE` | Optionnel | Fichier vault password | `/run/secrets/vault_password` |
+| `SMTP_HOST` | Optionnel | Hôte SMTP | `smtp.mailgun.org` |
+| `SMTP_PORT` | Optionnel | Port SMTP | `587` |
+| `SMTP_USER` | Optionnel | User SMTP | `postmaster@...` |
+| `SMTP_PASSWORD` | Optionnel | Password SMTP | `...` |
+| `SMTP_FROM` | Optionnel | Expéditeur email | `ansibleflow@example.com` |
+| `SLACK_WEBHOOK_URL` | Optionnel | Webhook notifications Slack | `https://hooks.slack.com/...` |
+| `DEBUG` | Oui | Mode debug backend | `false` |
 
 ### 3. (Optionnel) Configurer le mot de passe Ansible Vault
 
@@ -89,22 +121,12 @@ frontend     running         0.0.0.0:3000->3000/tcp
 nginx        running         0.0.0.0:80->80/tcp
 ```
 
-### Créer le premier compte administrateur
+### Compte administrateur au premier démarrage
 
-Au premier lancement, la base de données est vide. Créer un admin via l'API :
+Mode recommandé: renseigner `DEFAULT_ADMIN_USERNAME`, `DEFAULT_ADMIN_EMAIL`, `DEFAULT_ADMIN_PASSWORD` dans `.env`.  
+Au démarrage backend, le compte admin est créé automatiquement (ou mis à jour s'il existe déjà).
 
-```bash
-curl -X POST http://localhost:8000/api/auth/users \
-  -H "Content-Type: application/json" \
-  -d '{
-    "username": "admin",
-    "email": "admin@example.com",
-    "password": "motdepasse",
-    "role": "administrator"
-  }'
-```
-
-> Pour les lancements suivants, cet endpoint est protégé et nécessite un token admin.
+Mode manuel (si auto-bootstrap non configuré): créer le premier admin via l'API.
 
 ---
 
@@ -234,6 +256,19 @@ Dans `Settings > Secrets and variables > Actions`, ajouter:
 - `COMPOSE_FILE` (optionnel) : fichier Compose (défaut: `docker-compose.yml`)
 - `COMPOSE_PROJECT_NAME` (optionnel) : nom de stack Compose fixe (défaut: `ansibleflow`)
 - `ENV_FILE_CONTENT` : contenu complet du fichier `.env` à écrire sur le serveur avant `docker compose`
+
+### Où créer chaque variable/secrets
+
+| Élément | Où le créer | Utilisé par |
+|---|---|---|
+| `.env` local | Fichier `ansibleflow/.env` | Lancement local `docker compose up` |
+| `ENV_FILE_CONTENT` | GitHub `Settings > Secrets and variables > Actions` | Workflow déploiement (écrit `.env` sur serveur) |
+| `SSH_HOST` `SSH_PORT` `SSH_USER` | GitHub Secrets | Connexion SSH depuis GitHub Actions |
+| `SSH_PRIVATE_KEY` | GitHub Secret | Authentification SSH GitHub Actions |
+| `DEPLOY_PATH` | GitHub Secret | Dossier de déploiement sur le serveur |
+| `COMPOSE_FILE` | GitHub Secret (optionnel) | Fichier compose cible |
+| `COMPOSE_PROJECT_NAME` | GitHub Secret (optionnel) | Nom stable de stack (Portainer grouping) |
+| `authorized_keys` | Serveur: `~/.ssh/authorized_keys` de `SSH_USER` | Contient la clé publique liée à `SSH_PRIVATE_KEY` |
 
 ### Prérequis serveur
 

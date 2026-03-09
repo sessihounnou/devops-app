@@ -11,6 +11,18 @@ const DEPLOY_PROFILES = [
   { id: 'wordpress', label: 'WordPress (Docker)' },
 ]
 
+function Field({ label, children, required, hint }) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">
+        {label}{required && <span className="text-red-500 ml-0.5">*</span>}
+      </label>
+      {children}
+      {hint && <p className="mt-1 text-xs text-gray-400">{hint}</p>}
+    </div>
+  )
+}
+
 export default function AddProject() {
   const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
@@ -63,16 +75,6 @@ export default function AddProject() {
       setLoading(false)
     }
   }
-
-  const Field = ({ label, children, required, hint }) => (
-    <div>
-      <label className="block text-sm font-medium text-gray-700 mb-1">
-        {label}{required && <span className="text-red-500 ml-0.5">*</span>}
-      </label>
-      {children}
-      {hint && <p className="mt-1 text-xs text-gray-400">{hint}</p>}
-    </div>
-  )
 
   const inputClass = "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
   const monoClass = inputClass + " font-mono text-xs"
